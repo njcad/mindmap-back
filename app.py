@@ -58,28 +58,118 @@ def login():
         return jsonify({"error": "failed to fetch from database"}), 500
     return jsonify({"user_id": user.user.id}), 200
 
+@app.route('/api/make_session', methods=['GET', 'POST'])
+def make_session():
+    data = request.get_json()
+    teacher_id = data.get('user_id')
+    try:
+        response = (supabase.table('sessions').insert(
+            [{"teacher_id": teacher_id}],
+            returning="representation"
+        ).execute())
+        return jsonify({"session_id": response.data[0].get('session_id')}), 200
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "failed to fetch from database"}), 500
+
 @app.route('/api/test')
 def test():
     return jsonify({"message": "API is working!"})
 
-@app.route('/api/questions', methods=['GET', 'POST'])
-def handle_questions():
-    return jsonify({})
-# def handle_questions():
-#     if request.method == 'POST':
-#         # Get the questions from the request body
-#         new_questions = request.get_json()
-#         if not isinstance(new_questions, list):
-#             return jsonify({"error": "Expected a list of questions"}), 400
-        
-#         # Add the questions to our storage
-#         questions.extend(new_questions)
-#         print(questions)
-#         return jsonify({"message": "Questions added successfully", "count": len(new_questions)}), 201
+@app.route('/api/save_questions', methods=['POST'])
+def save_questions():
+    try:
+        questions = request.get_json()
+        response = (
+            supabase.table('questions').insert(
+                questions, returning="representation"
+            ).execute()
+        )
+        return jsonify({"questions": response.data, "count": response.count}), 200
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "upload failed"}), 500
     
-#     # Handle GET request
-#     return jsonify({"questions": questions})
+@app.route('/api/get_questions', methods=['POST'])
+def get_questions():
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        response = (
+            supabase.table('questions').select('*').eq('session_id', session_id).execute()
+        )
+        return jsonify({"questions": response.data, "count": response.count}), 200
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "upload failed"}), 500
 
+@app.route('/api/set_question', methods=['POST'])
+def set_question():
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        question_id = data.get('question_id')
+        session = (
+            supabase.table('sessions').update({'current_question': question_id}).eq('session_id', session_id).execute()
+        )
+        return jsonify({"session": session.data[0]}), 200
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "upload failed"}), 500
+
+@app.route('/api/current_question', methods=['POST'])
+def current_question():
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        session = (
+            supabase.table('sessions').select('*').eq('session_id', session_id).execute()
+        )
+        question_id = session.data[0]['current_question']
+        question = (
+            supabase.table('questions').select('*').eq('question_id', question_id).execute()
+        )
+        return jsonify({"question": {'text': question.data[0]['question_text'], 'id': question.data[0]['question_id']}}), 200
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "upload failed"}), 500
+
+@app.route('/api/get_submissions', methods=['POST'])
+def get_submissions():
+    try:
+        data = request.get_json()
+        question_id = data.get('question_id')
+        response = (
+            supabase.table('responses').select('*').eq('question_id', question_id).execute()
+        )
+        responses = {r['response_id']: r['response_text'] for r in response.data}
+        return jsonify(responses)
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "failed to fetch question"}), 500
+    
+@app.route('/api/submit', methods=['POST'])
+def submit():
+    data = request.get_json()
+    session_id = data.get('session_id')
+    student_id = data.get('user_id')
+    text = data.get('text')
+    try:
+        session = (
+            supabase.table('sessions').select('*').eq('session_id', session_id).execute()
+        )
+        question_id = session.data[0]['current_question']
+        response = (
+            supabase.table('responses').insert({
+                'question_id': question_id,
+                'student_id': student_id,
+                'response_text': text
+            }).execute()
+        )
+        return jsonify(response.data), 200
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "failed to fetch from database"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 
