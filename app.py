@@ -5,6 +5,7 @@ from supabase import create_client
 import os
 from flask import Flask
 
+# Load in env files for database access controls and OpenAI API keys
 load_dotenv()
 
 url: str = os.environ.get("SUPABASE_URL")
@@ -16,7 +17,10 @@ CORS(app)  # This will enable CORS for all routes
 
 @app.route('/')
 def home():
-    return jsonify({"message": "Welcome to the Flask API!"})
+    return jsonify({"message": "API endpoint is active!"})
+
+
+# USER AND SESSION MANAGEMENT
 
 @app.route('/api/signup', methods=['POST'])
 def signup():
@@ -32,10 +36,11 @@ def signup():
             "password": password
         })
     except Exception as e:
-        return jsonify({"error": "failed to sign up user"}), 500
+        return jsonify({"error": e}), 500
     
+    # Then insert the new user object into our database with their signup preferences
     try:
-        data, count = supabase.table('users').insert(
+        data, _ = supabase.table('users').insert(
             [{"user_id": response.user.id, "username": username, "is_teacher": isTeacher}],
             returning="representation"
         ).execute()
@@ -58,6 +63,7 @@ def login():
         return jsonify({"error": "failed to fetch from database"}), 500
     return jsonify({"user_id": user.user.id}), 200
 
+# Create a new session instance, assigned to a particular teacher by ID
 @app.route('/api/make_session', methods=['GET', 'POST'])
 def make_session():
     data = request.get_json()
@@ -72,10 +78,10 @@ def make_session():
         print(e)
         return jsonify({"error": "failed to fetch from database"}), 500
 
-@app.route('/api/test')
-def test():
-    return jsonify({"message": "API is working!"})
 
+# TEACHER QUESTIONS
+
+# Upload a list of questions to the database
 @app.route('/api/save_questions', methods=['POST'])
 def save_questions():
     try:
@@ -90,6 +96,7 @@ def save_questions():
         print(e)
         return jsonify({"error": "upload failed"}), 500
     
+# Fetch all questions associated with a particular session, returning both the questions themselves and a count
 @app.route('/api/get_questions', methods=['POST'])
 def get_questions():
     try:
@@ -103,6 +110,7 @@ def get_questions():
         print(e)
         return jsonify({"error": "upload failed"}), 500
 
+# Update a session to indicate the current question students are answering
 @app.route('/api/set_question', methods=['POST'])
 def set_question():
     try:
@@ -117,6 +125,7 @@ def set_question():
         print(e)
         return jsonify({"error": "upload failed"}), 500
 
+# Fetch the current question for a particular session
 @app.route('/api/current_question', methods=['POST'])
 def current_question():
     try:
@@ -134,20 +143,10 @@ def current_question():
         print(e)
         return jsonify({"error": "upload failed"}), 500
 
-@app.route('/api/get_submissions', methods=['POST'])
-def get_submissions():
-    try:
-        data = request.get_json()
-        question_id = data.get('question_id')
-        response = (
-            supabase.table('responses').select('*').eq('question_id', question_id).execute()
-        )
-        responses = {r['response_id']: r['response_text'] for r in response.data}
-        return jsonify(responses)
-    except Exception as e:
-        print(e)
-        return jsonify({"error": "failed to fetch question"}), 500
-    
+
+# STUDENT RESPONSES
+
+# Submit a student response to a particular question
 @app.route('/api/submit', methods=['POST'])
 def submit():
     data = request.get_json()
@@ -170,6 +169,21 @@ def submit():
     except Exception as e:
         print(e)
         return jsonify({"error": "failed to fetch from database"}), 500
+
+# Fetch all student responses for a particular question
+@app.route('/api/get_submissions', methods=['POST'])
+def get_submissions():
+    try:
+        data = request.get_json()
+        question_id = data.get('question_id')
+        response = (
+            supabase.table('responses').select('*').eq('question_id', question_id).execute()
+        )
+        responses = {r['response_id']: r['response_text'] for r in response.data}
+        return jsonify(responses)
+    except Exception as e:
+        print(e)
+        return jsonify({"error": "failed to fetch question"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 
